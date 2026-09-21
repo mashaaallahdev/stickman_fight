@@ -1,0 +1,28 @@
+{
+  "name": "retro-stickman-fight",
+  "version": "1.0.0",
+  "description": "Retro Stickman Auto-Brawler & Automated Video Pipeline for Shorts/Reels/TikTok",
+  "main": "src/game/engine.js",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "record": "node scripts/run_recorder.js",
+    "dispatch": "node scripts/send_telegram.js",
+    "pipeline": "node scripts/run_recorder.js && node scripts/send_telegram.js"
+  },
+  "keywords": [
+    "stickman",
+    "brawler",
+    "retro",
+    "automation",
+    "shorts",
+    "reels",
+    "tiktok"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "puppeteer": "^25.11.0"
+  }
+}

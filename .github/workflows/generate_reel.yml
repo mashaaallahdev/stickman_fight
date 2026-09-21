@@ -1,0 +1,104 @@
+name: Automated Stickman 9:16 Reel Pipeline
+
+on:
+  schedule:
+    # 2x daily: 08:00 UTC and 20:00 UTC
+    - cron: '0 8,20 * * *'
+  workflow_dispatch:
+    inputs:
+      p1:
+        description: 'Player 1 Fighter'
+        required: true
+        default: 'RANDOM'
+        type: choice
+        options:
+          - RANDOM
+          - BILLY
+          - JIMMY
+          - ABOBO
+          - CHIN
+          - WILLIAMS
+          - PHANTOM
+          - JEFF
+          - ROPER
+          - LINDA
+          - WILLY
+          - LOPAR
+      p2:
+        description: 'Player 2 Fighter'
+        required: true
+        default: 'RANDOM'
+        type: choice
+        options:
+          - RANDOM
+          - BILLY
+          - JIMMY
+          - ABOBO
+          - CHIN
+          - WILLIAMS
+          - PHANTOM
+          - JEFF
+          - ROPER
+          - LINDA
+          - WILLY
+          - LOPAR
+      stage:
+        description: 'Fight Stage Arena'
+        required: true
+        default: 'RANDOM'
+        type: choice
+        options:
+          - RANDOM
+          - ALLEY
+          - CAGE
+          - HARBOR
+          - SUBWAY
+          - FOUNDRY
+          - ROOFTOP
+
+concurrency:
+  group: stickman-pipeline
+  cancel-in-progress: false
+
+jobs:
+  simulate-and-dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install FFmpeg & Linux Chromium Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libgbm-dev libnss3 libatk-bridge2.0-0 libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libasound2
+
+      - name: Install NPM Dependencies
+        run: npm ci
+
+      - name: Run Headless Match Recorder (9:16 MP4 Transcode)
+        run: |
+          node scripts/run_recorder.js \
+            --p1 "${{ inputs.p1 || 'RANDOM' }}" \
+            --p2 "${{ inputs.p2 || 'RANDOM' }}" \
+            --stage "${{ inputs.stage || 'RANDOM' }}"
+
+      - name: Upload Video Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: stickman-fb-reels-${{ github.run_number }}
+          path: output/
+          retention-days: 14
+
+      - name: Dispatch 9:16 Video to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node scripts/send_telegram.js

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Retro Stickman Auto-Brawler</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background: #06060a;
+      color: #f0f0f5;
+      font-family: 'Press Start 2P', monospace, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* 16:9 Arcade CRT Screen Container */
+    .game-wrapper {
+      position: relative;
+      width: 95vw;
+      max-width: 1280px;
+      aspect-ratio: 16 / 9;
+      background: #000000;
+      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.95), 0 0 50px rgba(255, 45, 85, 0.25);
+      border-radius: 18px;
+      overflow: hidden;
+      border: 8px solid #1a1a24;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    /* Bottom quick controls outside canvas */
+    .control-panel {
+      margin-top: 12px;
+      display: flex;
+      gap: 12px;
+      background: rgba(18, 18, 28, 0.95);
+      padding: 8px 18px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      z-index: 50;
+    }
+
+    button {
+      background: #1e1e2d;
+      color: #ffffff;
+      border: 1px solid #3d3d52;
+      border-radius: 14px;
+      padding: 6px 14px;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    button:hover {
+      background: #ff2d55;
+      border-color: #ff2d55;
+    }
+
+    /* Initial splash overlay */
+    .splash-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 10, 16, 0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      cursor: pointer;
+      transition: opacity 0.3s ease;
+    }
+
+    .splash-title {
+      font-size: 26px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #ffea00;
+      text-shadow: 0 0 20px #ff2d55, 4px 4px 0 #b30000;
+      margin-bottom: 18px;
+    }
+
+    .splash-btn {
+      background: #ff2d55;
+      color: #fff;
+      padding: 14px 28px;
+      font-size: 14px;
+      border: 3px solid #fff;
+      border-radius: 8px;
+      box-shadow: 0 8px 20px rgba(255, 45, 85, 0.5);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="game-wrapper">
+    <canvas id="fightCanvas" width="1280" height="720"></canvas>
+
+    <div id="soundBanner" style="position: absolute; top: 16px; left: 50%; transform: translateX(-50%); background: #ffea00; color: #000; font-family: 'Press Start 2P', monospace; font-size: 11px; font-weight: 900; padding: 10px 18px; border-radius: 6px; box-shadow: 0 4px 20px rgba(255, 234, 0, 0.7); cursor: pointer; z-index: 100; text-align: center; border: 2px solid #000; display: none;">🔊 CLICK ANYWHERE TO UNMUTE FIGHT SOUND!</div>
+
+    <div id="splashOverlay" class="splash-overlay">
+      <div class="splash-title">⚔️ RETRO BRAWLER ⚔️</div>
+      <button class="splash-btn" id="startBtn">START BRAWL</button>
+    </div>
+  </div>
+
+  <div class="control-panel" id="controls">
+    <button id="rematchBtn">🔄 REMATCH</button>
+    <button id="stageBtn">🏟️ STAGE</button>
+    <button id="recordBtn">🔴 RECORD</button>
+  </div>
+
+  <script type="module">
+    // Force cache-busting on all module imports
+    const v = Date.now();
+    const { GameEngine } = await import(`../src/game/engine.js?v=${v}`);
+    const { sound } = await import(`../src/game/audio.js?v=${v}`);
+    const { recorder } = await import(`../src/recorder/capture.js?v=${v}`);
+
+    const canvas = document.getElementById('fightCanvas');
+    const splash = document.getElementById('splashOverlay');
+    const startBtn = document.getElementById('startBtn');
+    const rematchBtn = document.getElementById('rematchBtn');
+    const stageBtn = document.getElementById('stageBtn');
+    const recordBtn = document.getElementById('recordBtn');
+    const soundBanner = document.getElementById('soundBanner');
+
+    let engine = new GameEngine(canvas);
+
+    window.gameEngine = engine;
+    window.soundEngine = sound;
+    window.streamRecorder = recorder;
+    window.MATCH_FINISHED = false;
+
+    // Immediate global user-gesture audio unlock
+    const unlockAudio = () => {
+      sound.init();
+      sound.resume().then(() => {
+        if (soundBanner) soundBanner.style.display = 'none';
+      }).catch(() => {});
+    };
+
+    ['click', 'pointerdown', 'keydown', 'touchstart'].forEach(evt => {
+      window.addEventListener(evt, unlockAudio, { passive: true });
+    });
+
+    if (soundBanner) {
+      soundBanner.addEventListener('click', unlockAudio);
+    }
+
+    // Monitor audio context state and show banner only if suspended in normal browser
+    setInterval(() => {
+      if (sound.ctx) {
+        if (sound.ctx.state === 'suspended') {
+          if (soundBanner && splash.style.display === 'none') {
+            soundBanner.style.display = 'block';
+          }
+        } else {
+          if (soundBanner) soundBanner.style.display = 'none';
+        }
+      }
+    }, 400);
+
+    async function startMatch(autoRecord = false) {
+      splash.style.opacity = '0';
+      setTimeout(() => { splash.style.display = 'none'; }, 250);
+
+      // Init audio and WAIT for it to fully resume before recording
+      sound.init();
+      try {
+        await sound.resume();
+        if (soundBanner) soundBanner.style.display = 'none';
+      } catch(e) {}
+
+      engine.start();
+
+      if (autoRecord) {
+        // Warm-up delay: let AudioContext produce actual audio frames
+        // before MediaRecorder captures the track (fixes silent video)
+        await new Promise(r => setTimeout(r, 350));
+        recorder.start(canvas, sound.getMediaStreamTrack());
+      }
+    }
+
+    startBtn.addEventListener('click', () => {
+      unlockAudio();
+      startMatch(true); // Auto-record on start click
+    });
+    rematchBtn.addEventListener('click', () => {
+      engine.isRunning = false;
+      engine = new GameEngine(canvas);
+      window.gameEngine = engine;
+      window.MATCH_FINISHED = false;
+      engine.start();
+    });
+
+    stageBtn.addEventListener('click', () => {
+      engine.stage.selectRandomStage();
+      engine.crowd.initStageBubbles(engine.stage.currentStageKey);
+    });
+
+    recordBtn.addEventListener('click', async () => {
+      if (!recorder.isRecording) {
+        recordBtn.textContent = '⏹️ STOP';
+        recorder.start(canvas, sound.getMediaStreamTrack());
+      } else {
+        const result = await recorder.stop();
+        recordBtn.textContent = '🔴 RECORD';
+        if (result && result.blob) {
+          const url = URL.createObjectURL(result.blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `stickman_brawl_${Date.now()}.webm`;
+          a.click();
+        }
+      }
+    });
+
+    // Smart start logic:
+    // - If autostart=1 URL param → auto-start immediately (for headless Puppeteer recording)
+    // - Otherwise → show splash, require user click (ensures AudioContext unlocks properly)
+    function initAuto() {
+      const params = new URLSearchParams(window.location.search);
+      const isAutoStart = params.get('autostart') === '1' || params.get('record') === '1';
+
+      if (isAutoStart) {
+        // Headless recorder mode: skip splash, start immediately
+        splash.style.display = 'none';
+        startMatch(true);
+      } else {
+        // Normal browser mode: show splash, user must click to unlock audio
+        splash.style.display = 'flex';
+        splash.style.opacity = '1';
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', initAuto);
+    } else {
+      initAuto();
+    }
+
+    setInterval(async () => {
+      if (window.MATCH_FINISHED && recorder.isRecording) {
+        await recorder.stop();
+      }
+    }, 200);
+  </script>
+</body>
+</html>

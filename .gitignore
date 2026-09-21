@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+package-lock.json.bak
+
+# Video renders & recording outputs
+output/
+*.webm
+*.mp4
+
+# Environment secrets
+.env
+.env.*
+.env.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
