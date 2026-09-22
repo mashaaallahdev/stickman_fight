@@ -152,7 +152,7 @@ export class GameEngine {
     this.stateTimer = 0;
     this.projectiles = [];
     sound.init();
-    sound.startHalalBackgroundSound();
+    sound.startHalalBackgroundSound(this.stage.currentStageKey);
     sound.playAnnouncer(`ROUND ${this.currentRound}`);
     this.lastTime = performance.now();
     this._loop(this.lastTime);
@@ -365,8 +365,18 @@ export class GameEngine {
 
       // Pass active projectiles to AI so stickman can jump to avoid fireballs!
       this.ais.forEach(ai => ai.update(dt, this.projectiles));
-      this.fighters.forEach(f => f.update(dt, this.stage.bounds));
+      this.fighters.forEach(f => {
+        const wasGrounded = f.isGrounded;
+        f.update(dt, this.stage.bounds);
+        if (!wasGrounded && f.isGrounded && f.landingShockTimer > 0) {
+          sound.playFootstep('land');
+        }
+      });
       this._checkCollisions();
+
+      // Dynamic Match Tension & Heartbeat Update
+      const lowestHpRatio = Math.min(p1.hp / p1.maxHp, p2.hp / p2.maxHp);
+      sound.updateMatchTension(lowestHpRatio, lowestHpRatio < 0.3, this.currentRound);
 
       const dead = this.fighters.find(f => f.hp <= 0);
       if (dead || this.roundClock <= 0) {
@@ -519,6 +529,7 @@ export class GameEngine {
     // Announce next round
     const announceName = this.currentRound === 3 ? 'FINAL ROUND' : `ROUND ${this.currentRound}`;
     sound.playAnnouncer(announceName);
+    sound.startHalalBackgroundSound(this.stage.currentStageKey);
   }
 
 
@@ -565,6 +576,7 @@ export class GameEngine {
         if (isPowerStrike) {
           this.hitPauseTimer = 0.09;
           sound.playElementExplosion(attacker.element || 'FIRE');
+          sound.playCrowdGasp();
           this.crowd.onHit('heavy', attacker.name, defender.name);
           this.addCameraTrauma(0.55);
           this._triggerHitFlash(attacker.elementColor || '#00d2ff', 0.65);
@@ -574,6 +586,7 @@ export class GameEngine {
           this.hitPauseTimer = 0.09;
           if (isKick) sound.playKick('heavy');
           else sound.playPunch('heavy');
+          sound.playCrowdGasp();
           this.crowd.onHit('heavy', attacker.name, defender.name);
           this.addCameraTrauma(0.5);
           this._triggerHitFlash('#ffffff', 0.45);
@@ -587,6 +600,10 @@ export class GameEngine {
           this.crowd.onHit('light', attacker.name, defender.name);
           this.addCameraTrauma(0.24);
           // Light hits: NO spark burst — clean contact only
+        }
+
+        if (attacker.comboCounter >= 3) {
+          sound.playCrowdCheer(0.85, 1.4);
         }
 
         // Both fighters build Element Power from active martial arts combat!

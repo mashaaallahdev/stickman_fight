@@ -12,12 +12,16 @@ export class SoundEngine {
     this.bgmInterval = null;
     this.bgmStep = 0;
     this.isSlowMotion = false;
-    this.tempo = 132;
-    this.currentTrack = 'DOUBLE_DRAGON';
+    this.tempo = 124;
+    this.currentTrack = 'HALAL_DUFF';
     this.duffInterval = null;
     this.duffStep = 0;
     this.ambientWindSource = null;
     this.ambientWindGain = null;
+    this.crowdMurmurSource = null;
+    this.crowdMurmurGain = null;
+    this.tensionLevel = 0;
+    this.lastHeartbeatTime = 0;
   }
 
   init() {
@@ -699,13 +703,9 @@ export class SoundEngine {
     }
   }
 
-  playCrowdCheer() {
-    if (!this.ctx) return;
-    this._playNoise(1.4, 1400, 0.45);
-  }
-
   _playNoise(duration, cutoff = 1000, volume = 0.3) {
-    const bufferSize = this.ctx.sampleRate * duration;
+    if (!this.ctx) return;
+    const bufferSize = Math.floor(this.ctx.sampleRate * duration);
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
@@ -733,65 +733,162 @@ export class SoundEngine {
 
   // --- Islamically Permissible Background Sound Engine ---
   // Strictly NO musical instruments (no synths, strings, wind, or melodic instruments).
-  // Purely atmospheric environmental street ambiance + traditional acoustic Duff (frame drum) martial rhythm.
+  // Purely atmospheric environmental street ambiance + traditional acoustic Duff (frame drum) martial rhythm,
+  // human rhythmic clapping, dynamic crowd reactions, and physical movement foley.
 
-  _playDuffDum(time) {
+  _playDuffDum(time, isHeavy = false) {
     if (!this.ctx) return;
+    const dest = this.bgmGain;
+
+    // 1. Primary drum head membrane fundamental pitch-drop (leather drum skin)
     const osc = this.ctx.createOscillator();
     const filter = this.ctx.createBiquadFilter();
     const gain = this.ctx.createGain();
 
     osc.type = 'sine';
-    // Deep resonant acoustic membrane pitch drop (leather drum skin)
-    osc.frequency.setValueAtTime(76, time);
-    osc.frequency.exponentialRampToValueAtTime(42, time + 0.22);
+    const startFreq = isHeavy ? 92 : 80;
+    const endFreq = isHeavy ? 38 : 44;
+    const decayDur = isHeavy ? 0.36 : 0.28;
+
+    osc.frequency.setValueAtTime(startFreq, time);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, time + decayDur);
 
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(220, time);
+    filter.frequency.setValueAtTime(isHeavy ? 280 : 220, time);
 
-    gain.gain.setValueAtTime(0.55, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.28);
+    gain.gain.setValueAtTime(isHeavy ? 0.95 : 0.75, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + decayDur);
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(this.bgmGain);
+    gain.connect(dest);
 
     osc.start(time);
-    osc.stop(time + 0.28);
+    osc.stop(time + decayDur);
+
+    // 2. Leather skin wooden attack click (transient palm impact)
+    const click = this.ctx.createOscillator();
+    const clickGain = this.ctx.createGain();
+    click.type = 'triangle';
+    click.frequency.setValueAtTime(240, time);
+    click.frequency.exponentialRampToValueAtTime(40, time + 0.035);
+    clickGain.gain.setValueAtTime(0.4, time);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, time + 0.035);
+    click.connect(clickGain);
+    clickGain.connect(dest);
+    click.start(time);
+    click.stop(time + 0.035);
   }
 
   _playDuffTak(time, isAccent = false) {
     if (!this.ctx) return;
+    const dest = this.bgmGain;
+
     // Crisp acoustic rim / edge hand tap on wood frame
     const bufferSize = Math.floor(this.ctx.sampleRate * 0.08);
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.012));
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.015));
     }
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(isAccent ? 1600 : 1200, time);
-    filter.Q.setValueAtTime(2.0, time);
+    filter.frequency.setValueAtTime(isAccent ? 1750 : 1350, time);
+    filter.Q.setValueAtTime(2.8, time);
 
     const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(isAccent ? 0.38 : 0.24, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.07);
+    gain.gain.setValueAtTime(isAccent ? 0.55 : 0.38, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.075);
 
     noise.connect(filter);
     filter.connect(gain);
-    gain.connect(this.bgmGain);
+    gain.connect(dest);
 
+    noise.start(time);
+
+    // Wooden edge click resonance
+    const woodOsc = this.ctx.createOscillator();
+    const woodGain = this.ctx.createGain();
+    woodOsc.type = 'sine';
+    woodOsc.frequency.setValueAtTime(isAccent ? 560 : 440, time);
+    woodGain.gain.setValueAtTime(isAccent ? 0.35 : 0.2, time);
+    woodGain.gain.exponentialRampToValueAtTime(0.001, time + 0.04);
+    woodOsc.connect(woodGain);
+    woodGain.connect(dest);
+    woodOsc.start(time);
+    woodOsc.stop(time + 0.04);
+  }
+
+  _playDuffSlap(time) {
+    if (!this.ctx) return;
+    const dest = this.bgmGain;
+
+    // Open hand palm slap across the drum skin
+    const bufferSize = Math.floor(this.ctx.sampleRate * 0.12);
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.022));
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(950, time);
+    filter.Q.setValueAtTime(1.8, time);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.5, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.11);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(dest);
     noise.start(time);
   }
 
-  _startAtmosphericAmbiance() {
-    if (!this.ctx || this.ambientWindSource) return;
+  _playCrowdClap(time, intensity = 1.0) {
+    if (!this.ctx) return;
+    const dest = this.bgmGain;
+    // Rhythmic stadium crowd clapping: Staggered natural acoustic hand claps
+    const clapCount = 3 + Math.floor(Math.random() * 3);
+    for (let c = 0; c < clapCount; c++) {
+      const offset = (Math.random() * 0.025);
+      const clapTime = time + offset;
+      const bufferSize = Math.floor(this.ctx.sampleRate * 0.05);
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.009));
+      }
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
 
-    // Continuous 4-second looping ambient pink noise buffer for environmental city/arena wind
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(1100 + Math.random() * 300, clapTime);
+      filter.Q.setValueAtTime(2.2, clapTime);
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.22 * intensity, clapTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, clapTime + 0.045);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(dest);
+      noise.start(clapTime);
+    }
+  }
+
+  _startAtmosphericAmbiance(stageKey = 'ALLEY') {
+    if (!this.ctx) return;
+    this._stopAtmosphericAmbiance();
+
+    // 1. Stage Environmental Bed (4-second smooth looping pink/brown noise)
     const bufferSize = this.ctx.sampleRate * 4;
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -809,63 +906,311 @@ export class SoundEngine {
     this.ambientWindSource.loop = true;
 
     const filter = this.ctx.createBiquadFilter();
+    let cutoff = 420;
+    if (stageKey === 'SUBWAY') cutoff = 220; // Heavy subterranean low rumble
+    else if (stageKey === 'FOUNDRY') cutoff = 340; // Factory warm roar
+    else if (stageKey === 'ROOFTOP') cutoff = 650; // Open-sky gusting wind
+    else if (stageKey === 'CAGE') cutoff = 480;
+
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(450, this.ctx.currentTime);
+    filter.frequency.setValueAtTime(cutoff, this.ctx.currentTime);
 
     this.ambientWindGain = this.ctx.createGain();
-    this.ambientWindGain.gain.setValueAtTime(0.18, this.ctx.currentTime);
+    this.ambientWindGain.gain.setValueAtTime(0.24, this.ctx.currentTime);
 
     this.ambientWindSource.connect(filter);
     filter.connect(this.ambientWindGain);
     this.ambientWindGain.connect(this.bgmGain);
 
     this.ambientWindSource.start();
-  }
 
-  startHalalBackgroundSound() {
-    this._ensureAudio();
-    if (!this.ctx) return;
-
-    this.stopHalalBackgroundSound();
-    this._startAtmosphericAmbiance();
-
-    // Traditional Duff 8-step martial rhythm at ~124 BPM
-    // Pattern: Dum (0), Rest (1), Tak (2), Rest (3), Tak (4), Dum (5), Tak (6), Rest (7)
-    const stepDurationMs = 240;
-    this.duffStep = 0;
-
-    this.duffInterval = setInterval(() => {
-      if (!this.ctx || this.ctx.state !== 'running') return;
-      const now = this.ctx.currentTime;
-      const s = this.duffStep % 8;
-
-      if (s === 0) {
-        this._playDuffDum(now);
-      } else if (s === 2) {
-        this._playDuffTak(now, false);
-      } else if (s === 4) {
-        this._playDuffTak(now, true);
-      } else if (s === 5) {
-        this._playDuffDum(now);
-      } else if (s === 6) {
-        this._playDuffTak(now, true);
-      }
-
-      this.duffStep++;
-    }, stepDurationMs);
-  }
-
-  stopHalalBackgroundSound() {
-    if (this.duffInterval) {
-      clearInterval(this.duffInterval);
-      this.duffInterval = null;
+    // 2. Spectator Crowd Presence & Arena Murmur (Low vocal formant background)
+    const crowdBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const cData = crowdBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      cData[i] = (Math.random() * 2 - 1) * 0.12;
     }
+    this.crowdMurmurSource = this.ctx.createBufferSource();
+    this.crowdMurmurSource.buffer = crowdBuffer;
+    this.crowdMurmurSource.loop = true;
+
+    const crowdFilter = this.ctx.createBiquadFilter();
+    crowdFilter.type = 'bandpass';
+    crowdFilter.frequency.setValueAtTime(680, this.ctx.currentTime);
+    crowdFilter.Q.setValueAtTime(1.4, this.ctx.currentTime);
+
+    this.crowdMurmurGain = this.ctx.createGain();
+    this.crowdMurmurGain.gain.setValueAtTime(0.16, this.ctx.currentTime);
+
+    this.crowdMurmurSource.connect(crowdFilter);
+    crowdFilter.connect(this.crowdMurmurGain);
+    this.crowdMurmurGain.connect(this.bgmGain);
+
+    this.crowdMurmurSource.start();
+  }
+
+  _stopAtmosphericAmbiance() {
     if (this.ambientWindSource) {
       try {
         this.ambientWindSource.stop();
         this.ambientWindSource.disconnect();
       } catch (e) {}
       this.ambientWindSource = null;
+    }
+    if (this.crowdMurmurSource) {
+      try {
+        this.crowdMurmurSource.stop();
+        this.crowdMurmurSource.disconnect();
+      } catch (e) {}
+      this.crowdMurmurSource = null;
+    }
+  }
+
+  startHalalBackgroundSound(stageKey = 'ALLEY') {
+    this._ensureAudio();
+    if (!this.ctx) return;
+
+    this.stopHalalBackgroundSound();
+    this._startAtmosphericAmbiance(stageKey);
+
+    this.duffStep = 0;
+    this.tensionLevel = 0;
+    this._scheduleDuffTick();
+  }
+
+  _scheduleDuffTick() {
+    if (!this.ctx) return;
+    const baseStepMs = 125; // 16-step grid at 120 BPM = 125ms per 16th note
+    const tensionFactor = 1.0 - (this.tensionLevel * 0.18); // accelerates up to ~146 BPM in high tension
+    const stepDurationMs = Math.max(95, baseStepMs * tensionFactor);
+
+    this.duffInterval = setTimeout(() => {
+      if (!this.ctx || this.ctx.state !== 'running') {
+        this._scheduleDuffTick();
+        return;
+      }
+
+      const now = this.ctx.currentTime;
+      const s = this.duffStep % 16;
+      const isDanger = this.tensionLevel > 0.45;
+
+      // 16-Step Traditional Martial Duff & Stadium Crowd Clap Pattern:
+      // Step 0:  Heavy DUM (Downbeat)
+      // Step 2:  Soft TAK
+      // Step 4:  CROWD CLAP + TAK
+      // Step 6:  DUM
+      // Step 8:  Deep DUM
+      // Step 10: SLAP (Open hand)
+      // Step 12: CROWD CLAP + TAK (Backbeat)
+      // Step 14: TAK (Accent)
+      // Danger Mode adds syncopated double-dum kicks on 1, 7, 13 & finger rolls!
+
+      if (s === 0) {
+        this._playDuffDum(now, true);
+      } else if (s === 1 && isDanger) {
+        this._playDuffDum(now, false);
+      } else if (s === 2) {
+        this._playDuffTak(now, false);
+      } else if (s === 4) {
+        this._playDuffTak(now, true);
+        this._playCrowdClap(now, isDanger ? 1.4 : 0.9);
+      } else if (s === 6) {
+        this._playDuffDum(now, false);
+      } else if (s === 7 && isDanger) {
+        this._playDuffDum(now, false);
+      } else if (s === 8) {
+        this._playDuffDum(now, true);
+      } else if (s === 10) {
+        this._playDuffSlap(now);
+      } else if (s === 12) {
+        this._playDuffTak(now, true);
+        this._playCrowdClap(now, isDanger ? 1.5 : 1.0);
+      } else if (s === 14) {
+        this._playDuffTak(now, true);
+      } else if (s === 15 && isDanger) {
+        this._playDuffTak(now, false);
+      }
+
+      this.duffStep++;
+      this._scheduleDuffTick();
+    }, stepDurationMs);
+  }
+
+  stopHalalBackgroundSound() {
+    if (this.duffInterval) {
+      clearTimeout(this.duffInterval);
+      this.duffInterval = null;
+    }
+    this._stopAtmosphericAmbiance();
+  }
+
+  updateMatchTension(lowestHpRatio = 1.0, isDanger = false, currentRound = 1) {
+    if (!this.ctx) return;
+    let targetTension = 0;
+    if (lowestHpRatio < 0.25) targetTension = 1.0;
+    else if (lowestHpRatio < 0.45) targetTension = 0.7;
+    else if (lowestHpRatio < 0.7) targetTension = 0.35;
+
+    if (currentRound >= 3) targetTension = Math.max(targetTension, 0.5);
+    this.tensionLevel = targetTension;
+
+    // Heartbeat for critical HP (< 22%)
+    if (lowestHpRatio < 0.22 && this.ctx.state === 'running') {
+      const now = this.ctx.currentTime;
+      if (!this.lastHeartbeatTime || now - this.lastHeartbeatTime > 1.05) {
+        this.lastHeartbeatTime = now;
+        this.playHeartbeat();
+      }
+    }
+  }
+
+  playHeartbeat() {
+    this._ensureAudio();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    // Sub-bass physiological "lub-dub"
+    [0, 0.14].forEach((delay, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      const f = idx === 0 ? 58 : 50;
+      osc.frequency.setValueAtTime(f, now + delay);
+      osc.frequency.exponentialRampToValueAtTime(24, now + delay + 0.16);
+
+      gain.gain.setValueAtTime(idx === 0 ? 0.75 : 0.6, now + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.16);
+
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(now + delay);
+      osc.stop(now + delay + 0.16);
+    });
+  }
+
+  playCrowdGasp() {
+    this._ensureAudio();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const dur = 0.48;
+
+    // Arena audience collective "Ooooh!"
+    const bufferSize = Math.floor(this.ctx.sampleRate * dur);
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    // Vocal formant filters for natural "OH" sound
+    const f1 = this.ctx.createBiquadFilter();
+    f1.type = 'bandpass';
+    f1.frequency.setValueAtTime(480, now);
+    f1.frequency.exponentialRampToValueAtTime(380, now + dur);
+    f1.Q.setValueAtTime(4.0, now);
+
+    const f2 = this.ctx.createBiquadFilter();
+    f2.type = 'bandpass';
+    f2.frequency.setValueAtTime(850, now);
+    f2.frequency.exponentialRampToValueAtTime(700, now + dur);
+    f2.Q.setValueAtTime(3.5, now);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.65, now + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+    noise.connect(f1);
+    f1.connect(gain);
+    noise.connect(f2);
+    f2.connect(gain);
+    gain.connect(this.sfxGain);
+
+    noise.start(now);
+  }
+
+  playCrowdCheer(intensity = 1.0, duration = 2.0) {
+    this._ensureAudio();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    // Multi-layered arena crowd roar
+    const bufferSize = Math.floor(this.ctx.sampleRate * duration);
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(750, now);
+    filter.frequency.linearRampToValueAtTime(1300, now + duration * 0.4);
+    filter.frequency.exponentialRampToValueAtTime(800, now + duration);
+    filter.Q.setValueAtTime(1.8, now);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.linearRampToValueAtTime(0.85 * intensity, now + 0.25);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.sfxGain);
+
+    noise.start(now);
+  }
+
+  playFootstep(type = 'step') {
+    this._ensureAudio();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    if (type === 'land') {
+      // Heavy two-foot landing thud on concrete/canvas
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(130, now);
+      osc.frequency.exponentialRampToValueAtTime(32, now + 0.12);
+      gain.gain.setValueAtTime(0.65, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.12);
+      this._playNoise(0.09, 800, 0.4);
+    } else if (type === 'dash') {
+      // Fast sneaker friction scuff
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(450, now);
+      osc.frequency.exponentialRampToValueAtTime(180, now + 0.1);
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.1);
+      this._playNoise(0.08, 1600, 0.3);
+    } else {
+      // Combat step
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(95, now);
+      osc.frequency.exponentialRampToValueAtTime(38, now + 0.06);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      osc.connect(gain);
+      gain.connect(this.sfxGain);
+      osc.start(now);
+      osc.stop(now + 0.06);
     }
   }
 

@@ -83,6 +83,9 @@ async function runRecorder() {
   page.on('console', msg => {
     console.log(`[Browser Console] ${msg.type()}: ${msg.text()}`);
   });
+  page.on('pageerror', err => {
+    console.error(`[Browser PageError] ${err.toString()}`);
+  });
 
   console.log(`=== [3/5] Navigating to Brawl Viewport (P1: ${p1Choice}, P2: ${p2Choice}, Stage: ${stageChoice}) ===`);
   const queryParams = new URLSearchParams({
@@ -111,18 +114,30 @@ async function runRecorder() {
   let recordingData = null;
   let matchData = null;
 
+  let lastLogTime = 0;
   while (Date.now() - startTime < maxTimeoutMs) {
     const status = await page.evaluate(() => ({
       finished: window.MATCH_FINISHED,
       recordingCompleted: window.RECORDING_COMPLETED,
       matchData: window.MATCH_DATA,
-      base64: window.RECORDING_BASE64
+      hasBase64: !!window.RECORDING_BASE64,
+      base64Len: window.RECORDING_BASE64 ? window.RECORDING_BASE64.length : 0,
+      matchState: window.gameEngine ? window.gameEngine.matchState : null,
+      matchDuration: window.gameEngine ? window.gameEngine.totalMatchDuration : null,
+      round: window.gameEngine ? window.gameEngine.currentRound : null,
+      isRecording: window.streamRecorder ? window.streamRecorder.isRecording : null
     }));
 
-    if (status.recordingCompleted && status.base64) {
-      recordingData = status.base64;
+    if (Date.now() - lastLogTime > 4000) {
+      lastLogTime = Date.now();
+      console.log(`[Recorder Progress] Round: ${status.round}, State: ${status.matchState}, Duration: ${status.matchDuration ? status.matchDuration.toFixed(1) : 0}s, Rec: ${status.isRecording}, Fin: ${status.finished}, Done: ${status.recordingCompleted}`);
+    }
+
+    if (status.recordingCompleted && status.hasBase64) {
+      // Grab actual base64
+      recordingData = await page.evaluate(() => window.RECORDING_BASE64);
       matchData = status.matchData;
-      console.log('[Recorder] Recording completed signal received!');
+      console.log('[Recorder] Recording completed signal received! Video size:', status.base64Len, 'chars');
       break;
     }
 
