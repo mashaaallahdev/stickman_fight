@@ -2,8 +2,12 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import ffmpegPath from 'ffmpeg-static';
 import dotenv from 'dotenv';
 
+const execAsync = promisify(exec);
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -66,7 +70,27 @@ async function sendTelegramVideo() {
   }
 
   const meta = JSON.parse(fs.readFileSync(META_FILE, 'utf8'));
-  const videoPath = meta.videoFile;
+  let videoPath = meta.videoFile;
+
+  // Enforce MP4 format for Facebook Reels & mobile Telegram compatibility (< 50 MB Telegram Bot API limit)
+  const MAX_TELEGRAM_BYTES = 48 * 1024 * 1024; // 48 MB safety cap for Telegram Bot API
+  const rawWebmCandidate = videoPath.endsWith('.webm') ? videoPath : videoPath.replace(/\.mp4$/i, '.webm');
+  const mp4Path = videoPath.endsWith('.mp4') ? videoPath : videoPath.replace(/\.webm$/i, '.mp4');
+
+  const needsTranscode = !fs.existsSync(mp4Path) || (fs.statSync(mp4Path).size > MAX_TELEGRAM_BYTES) || (fs.statSync(mp4Path).size < 1024 * 1024);
+
+  if (needsTranscode && fs.existsSync(rawWebmCandidate)) {
+    console.log('[Telegram] Transcoding to 16:9 Landscape Full HD MP4 (1920x1080)...');
+    const ffmpegBin = ffmpegPath || 'ffmpeg';
+    const transcodeCmd = `"${ffmpegBin}" -y -i "${rawWebmCandidate}" -vf "scale=1920:1080:flags=lanczos" -c:v libx264 -preset fast -crf 22 -maxrate 4000k -bufsize 8000k -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${mp4Path}"`;
+    await execAsync(transcodeCmd);
+    console.log(`[Telegram] Transcode complete: ${mp4Path} (${(fs.statSync(mp4Path).size / (1024 * 1024)).toFixed(2)} MB)`);
+    videoPath = mp4Path;
+    meta.videoFile = mp4Path;
+    fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
+  } else if (fs.existsSync(mp4Path)) {
+    videoPath = mp4Path;
+  }
 
   if (!videoPath || !fs.existsSync(videoPath)) {
     console.warn(`[Telegram] Video file not found: ${videoPath}`);
@@ -87,7 +111,6 @@ async function sendTelegramVideo() {
   console.log(`[Telegram] Uploading ${videoPath} (${(fs.statSync(videoPath).size / (1024 * 1024)).toFixed(2)} MB) to chat ${CHAT_ID}...`);
 
   const https = await import('https');
-  const fileBuffer = fs.readFileSync(videoPath);
   const fileName = path.basename(videoPath);
   const mimeType = fileName.endsWith('.mp4') ? 'video/mp4' : 'video/webm';
 
@@ -97,6 +120,8 @@ async function sendTelegramVideo() {
     `--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${CHAT_ID}\r\n`,
     `--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`,
     `--${boundary}\r\nContent-Disposition: form-data; name="supports_streaming"\r\n\r\ntrue\r\n`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="width"\r\n\r\n1920\r\n`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="height"\r\n\r\n1080\r\n`,
     `--${boundary}\r\nContent-Disposition: form-data; name="video"; filename="${fileName}"\r\nContent-Type: ${mimeType}\r\n\r\n`
   ].join('');
 
@@ -104,7 +129,8 @@ async function sendTelegramVideo() {
 
   const headerBuffer = Buffer.from(headerParts, 'utf8');
   const footerBuffer = Buffer.from(footer, 'utf8');
-  const totalLength = headerBuffer.length + fileBuffer.length + footerBuffer.length;
+  const fileSize = fs.statSync(videoPath).size;
+  const totalLength = headerBuffer.length + fileSize + footerBuffer.length;
 
   console.log(`[Telegram] Payload size: ${(totalLength / (1024 * 1024)).toFixed(2)} MB. Streaming to Telegram...`);
 
@@ -119,7 +145,7 @@ async function sendTelegramVideo() {
         'Content-Length': totalLength,
         'Connection': 'keep-alive'
       },
-      timeout: 120000
+      timeout: 600000 // 10 minutes timeout for large video uploads
     }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
@@ -147,14 +173,35 @@ async function sendTelegramVideo() {
 
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error('Telegram request timed out'));
+      reject(new Error('Telegram request timed out after 10 minutes'));
     });
 
-    // Write multipart payload
+    // Stream multipart payload in chunks
     req.write(headerBuffer);
-    req.write(fileBuffer);
-    req.write(footerBuffer);
-    req.end();
+    const fileStream = fs.createReadStream(videoPath, { highWaterMark: 64 * 1024 });
+    let uploadedBytes = 0;
+    let lastLoggedPercent = 0;
+
+    fileStream.on('data', chunk => {
+      uploadedBytes += chunk.length;
+      const percent = Math.floor((uploadedBytes / fileSize) * 100);
+      if (percent - lastLoggedPercent >= 15) {
+        lastLoggedPercent = percent;
+        console.log(`[Telegram Upload] Progress: ${percent}% (${(uploadedBytes / (1024 * 1024)).toFixed(1)} MB / ${(fileSize / (1024 * 1024)).toFixed(1)} MB)`);
+      }
+      req.write(chunk);
+    });
+
+    fileStream.on('end', () => {
+      req.write(footerBuffer);
+      req.end();
+      console.log('[Telegram Upload] All bytes sent! Waiting for Telegram confirmation...');
+    });
+
+    fileStream.on('error', err => {
+      req.destroy();
+      reject(err);
+    });
   });
 }
 

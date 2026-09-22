@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import ffmpegPath from 'ffmpeg-static';
 import { startServer } from './serve.js';
 
 const execAsync = promisify(exec);
@@ -179,29 +180,24 @@ async function runRecorder() {
     timestamp: new Date().toISOString()
   };
 
-  // Attempt FFmpeg conversion to 9:16 Vertical MP4 (1080x1920) for Facebook Reels / Shorts / TikTok
+  // FFmpeg conversion to 16:9 Landscape / Horizontal MP4 (1920x1080) for YouTube / Desktop
+  const ffmpegBin = ffmpegPath || 'ffmpeg';
   try {
-    const ffmpegCheck = await execAsync('ffmpeg -version');
-    if (ffmpegCheck.stdout) {
-      console.log('[FFmpeg] Found FFmpeg! Transcoding WebM to 9:16 (1080x1920) H.264/AAC MP4 for FB Reels...');
-      // 9:16 Vertical Video:
-      // Background: Scaled to fill 1080x1920 and blurred (boxblur)
-      // Foreground: Scaled to 1080px wide (1080x608, aspect ratio maintained) and centered vertically
-      const verticalFilter = `"[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5[bg];[0:v]scale=1080:608[fg];[bg][fg]overlay=0:(H-h)/2"`;
-      const transcodeCmd = `ffmpeg -y -i "${rawWebmPath}" -vf ${verticalFilter} -c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${finalMp4Path}"`;
-      await execAsync(transcodeCmd);
-      console.log(`[FFmpeg] 9:16 Vertical Transcoding complete: ${finalMp4Path} (${fs.statSync(finalMp4Path).size} bytes)`);
-      matchPayload.videoFile = finalMp4Path;
+    console.log(`[FFmpeg] Using FFmpeg binary: ${ffmpegBin}`);
+    console.log('[FFmpeg] Transcoding WebM to 16:9 Landscape (1920x1080) H.264/AAC MP4...');
+    const transcodeCmd = `"${ffmpegBin}" -y -i "${rawWebmPath}" -vf "scale=1920:1080:flags=lanczos" -c:v libx264 -preset fast -crf 22 -maxrate 4000k -bufsize 8000k -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${finalMp4Path}"`;
+    await execAsync(transcodeCmd);
+    console.log(`[FFmpeg] 16:9 Landscape Transcoding complete: ${finalMp4Path} (${(fs.statSync(finalMp4Path).size / (1024 * 1024)).toFixed(2)} MB)`);
+    matchPayload.videoFile = finalMp4Path;
 
-      // Optionally copy to artifacts directory if env is set
-      if (process.env.ARTIFACT_DIR && fs.existsSync(process.env.ARTIFACT_DIR)) {
-        try {
-          fs.copyFileSync(finalMp4Path, path.join(process.env.ARTIFACT_DIR, 'latest_fight_video.mp4'));
-        } catch (e) {}
-      }
+    // Optionally copy to artifacts directory if env is set
+    if (process.env.ARTIFACT_DIR && fs.existsSync(process.env.ARTIFACT_DIR)) {
+      try {
+        fs.copyFileSync(finalMp4Path, path.join(process.env.ARTIFACT_DIR, 'latest_fight_video.mp4'));
+      } catch (e) {}
     }
   } catch (err) {
-    console.log('[FFmpeg] FFmpeg not found or transcode skipped. Using raw WebM format:', err.message);
+    console.error('[FFmpeg] Transcode failed. Using raw WebM format:', err.message);
   }
 
   fs.writeFileSync(metaPath, JSON.stringify(matchPayload, null, 2));
