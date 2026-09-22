@@ -180,14 +180,14 @@ async function runRecorder() {
     timestamp: new Date().toISOString()
   };
 
-  // FFmpeg conversion to 16:9 Landscape / Horizontal MP4 (1920x1080) for YouTube / Desktop
+  // FFmpeg conversion to 9:16 Rotated Landscape MP4 (1080x1920) for Mobile Reels (turn phone sideways)
   const ffmpegBin = ffmpegPath || 'ffmpeg';
   try {
     console.log(`[FFmpeg] Using FFmpeg binary: ${ffmpegBin}`);
-    console.log('[FFmpeg] Transcoding WebM to 16:9 Landscape (1920x1080) H.264/AAC MP4...');
-    const transcodeCmd = `"${ffmpegBin}" -y -i "${rawWebmPath}" -vf "scale=1920:1080:flags=lanczos" -c:v libx264 -preset fast -crf 22 -maxrate 4000k -bufsize 8000k -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${finalMp4Path}"`;
+    console.log('[FFmpeg] Transcoding WebM to 9:16 Rotated Landscape (1080x1920) H.264/AAC MP4...');
+    const transcodeCmd = `"${ffmpegBin}" -y -i "${rawWebmPath}" -vf "scale=1920:1080:flags=lanczos,transpose=1" -c:v libx264 -preset fast -crf 22 -maxrate 3500k -bufsize 7000k -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${finalMp4Path}"`;
     await execAsync(transcodeCmd);
-    console.log(`[FFmpeg] 16:9 Landscape Transcoding complete: ${finalMp4Path} (${(fs.statSync(finalMp4Path).size / (1024 * 1024)).toFixed(2)} MB)`);
+    console.log(`[FFmpeg] 9:16 Rotated Landscape Transcoding complete: ${finalMp4Path} (${(fs.statSync(finalMp4Path).size / (1024 * 1024)).toFixed(2)} MB)`);
     matchPayload.videoFile = finalMp4Path;
 
     // Optionally copy to artifacts directory if env is set

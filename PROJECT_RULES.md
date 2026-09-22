@@ -3,8 +3,8 @@
 ## Project Identity
 
 - **Name:** Retro Stickman Auto-Brawler & Video Pipeline
-- **Target Audience:** Automated 16:9 Landscape Full HD video generation (YouTube, Facebook, X/Twitter).
-- **Core Loop:** Headless simulation -> Auto combat AI -> Screen record -> FFmpeg transcode (16:9 Full HD MP4) -> Telegram Bot dispatch (Scheduled 2x/day via GitHub Actions).
+- **Target Audience:** Automated 9:16 Rotated Landscape video generation (Facebook Reels, YouTube Shorts, TikTok - viewers tilt phone sideways for full screen).
+- **Core Loop:** Headless simulation -> Auto combat AI -> Screen record -> FFmpeg transcode (9:16 Rotated Landscape 1080x1920 MP4) -> Telegram Bot dispatch (Scheduled 2x/day via GitHub Actions).
 
 ---
 

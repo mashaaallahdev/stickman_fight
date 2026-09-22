@@ -80,14 +80,19 @@ async function sendTelegramVideo() {
   const needsTranscode = !fs.existsSync(mp4Path) || (fs.statSync(mp4Path).size > MAX_TELEGRAM_BYTES) || (fs.statSync(mp4Path).size < 1024 * 1024);
 
   if (needsTranscode && fs.existsSync(rawWebmCandidate)) {
-    console.log('[Telegram] Transcoding to 16:9 Landscape Full HD MP4 (1920x1080)...');
+    console.log('[Telegram] Transcoding to 9:16 Rotated Landscape MP4 (1080x1920)...');
     const ffmpegBin = ffmpegPath || 'ffmpeg';
-    const transcodeCmd = `"${ffmpegBin}" -y -i "${rawWebmCandidate}" -vf "scale=1920:1080:flags=lanczos" -c:v libx264 -preset fast -crf 22 -maxrate 4000k -bufsize 8000k -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${mp4Path}"`;
+    const transcodeCmd = `"${ffmpegBin}" -y -i "${rawWebmCandidate}" -vf "scale=1920:1080:flags=lanczos,transpose=1" -c:v libx264 -preset fast -crf 22 -maxrate 3500k -bufsize 7000k -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "${mp4Path}"`;
     await execAsync(transcodeCmd);
     console.log(`[Telegram] Transcode complete: ${mp4Path} (${(fs.statSync(mp4Path).size / (1024 * 1024)).toFixed(2)} MB)`);
     videoPath = mp4Path;
     meta.videoFile = mp4Path;
     fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
+    if (process.env.ARTIFACT_DIR && fs.existsSync(process.env.ARTIFACT_DIR)) {
+      try {
+        fs.copyFileSync(mp4Path, path.join(process.env.ARTIFACT_DIR, 'latest_fight_video.mp4'));
+      } catch (e) {}
+    }
   } else if (fs.existsSync(mp4Path)) {
     videoPath = mp4Path;
   }
@@ -120,8 +125,8 @@ async function sendTelegramVideo() {
     `--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${CHAT_ID}\r\n`,
     `--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n`,
     `--${boundary}\r\nContent-Disposition: form-data; name="supports_streaming"\r\n\r\ntrue\r\n`,
-    `--${boundary}\r\nContent-Disposition: form-data; name="width"\r\n\r\n1920\r\n`,
-    `--${boundary}\r\nContent-Disposition: form-data; name="height"\r\n\r\n1080\r\n`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="width"\r\n\r\n1080\r\n`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="height"\r\n\r\n1920\r\n`,
     `--${boundary}\r\nContent-Disposition: form-data; name="video"; filename="${fileName}"\r\nContent-Type: ${mimeType}\r\n\r\n`
   ].join('');
 
