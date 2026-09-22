@@ -3,8 +3,8 @@
 ## Project Identity
 
 - **Name:** Retro Stickman Auto-Brawler & Video Pipeline
-- **Target Audience:** Automated short-form video generation (Facebook Reels, TikTok, YouTube Shorts).
-- **Core Loop:** Headless simulation -> Auto combat AI -> Screen record -> FFmpeg transcode -> Telegram Bot dispatch (Scheduled 3x/day via GitHub Actions).
+- **Target Audience:** Automated 16:9 Landscape Full HD video generation (YouTube, Facebook, X/Twitter).
+- **Core Loop:** Headless simulation -> Auto combat AI -> Screen record -> FFmpeg transcode (16:9 Full HD MP4) -> Telegram Bot dispatch (Scheduled 2x/day via GitHub Actions).
 
 ---
 
@@ -15,10 +15,10 @@ When generating or modifying files in this workspace, strictly conform to this f
 ```text
 ├── .github/
 │   └── workflows/
-│       └── generate_reel.yml    # Cron runner (3x daily: 08:00, 14:00, 20:00 UTC)
+│       └── generate_reel.yml    # Cron runner (2x daily: 08:00, 20:00 UTC)
 ├── public/
 │   ├── assets/                  # 8-bit audio clips, retro sound FX
-│   └── index.html               # Canvas host with viewport locked to 1080x1920
+│   └── index.html               # Canvas host with 16:9 arcade widescreen viewport
 ├── src/
 │   ├── game/
 │   │   ├── engine.js            # Game loop, state coordinator, match clock

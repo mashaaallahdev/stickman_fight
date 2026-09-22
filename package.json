@@ -1,7 +1,7 @@
 {
   "name": "retro-stickman-fight",
   "version": "1.0.0",
-  "description": "Retro Stickman Auto-Brawler & Automated Video Pipeline for Shorts/Reels/TikTok",
+  "description": "Retro Stickman Auto-Brawler & Automated 16:9 Landscape Video Pipeline",
   "main": "src/game/engine.js",
   "type": "module",
   "scripts": {

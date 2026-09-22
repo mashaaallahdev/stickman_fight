@@ -1,4 +1,4 @@
-name: Automated Stickman 9:16 Reel Pipeline
+name: Automated Stickman 16:9 Landscape Video Pipeline
 
 on:
   schedule:
@@ -84,7 +84,7 @@ jobs:
       - name: Install NPM Dependencies
         run: npm ci
 
-      - name: Run Headless Match Recorder (9:16 MP4 Transcode)
+      - name: Run Headless Match Recorder (16:9 Landscape MP4 Transcode)
         run: |
           node scripts/run_recorder.js \
             --p1 "${{ inputs.p1 || 'RANDOM' }}" \
@@ -94,11 +94,11 @@ jobs:
       - name: Upload Video Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: stickman-fb-reels-${{ github.run_number }}
+          name: stickman-landscape-video-${{ github.run_number }}
           path: output/
           retention-days: 14
 
-      - name: Dispatch 9:16 Video to Telegram
+      - name: Dispatch 16:9 Video to Telegram
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
